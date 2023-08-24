@@ -195,6 +195,32 @@ simpleSpec =
       answerYes (entityVal answer) `shouldBe` True
 ```
 
+Can handle inserting multiple records in a single transaction
+
+```haskell
+multiInsertSpec :: IO ()
+multiInsertSpec = do
+  let
+    logFile :: FilePath
+    logFile = "test.graphula"
+
+    failingGraph :: IO ()
+    failingGraph = runGraphulaT Nothing runDB . runGraphulaLoggedWithFileT logFile $ do
+      student <- node @Student () mempty
+      question <- node @Question () mempty
+      answer <- node @Answer
+        (entityKey question, entityKey student)
+        $ edit $ \a -> a { answerYes = True }
+
+      -- Test failures will cause the graph to be logged (not any exception)
+      liftIO $ answerYes (entityVal answer) `shouldBe` False
+
+  failingGraph `shouldThrow` anyException
+
+  n <- lines <$> readFile logFile
+  n `shouldSatisfy` (not . null)
+```
+
 <!--
 ```haskell
 main :: IO ()
@@ -202,6 +228,7 @@ main = hspec $
   describe "graphula" . parallel $ do
     it "generates and links arbitrary graphs of data" simpleSpec
     it "allows logging graphs" loggingSpec
+    it "allows for inserting multiple records in a single transaction" multiInsertSpec
 
 runDB :: MonadUnliftIO m => ReaderT SqlBackend (NoLoggingT (ResourceT m)) a -> m a
 runDB f = runSqlite "test.db" $ do

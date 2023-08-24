@@ -4,6 +4,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -16,6 +17,8 @@ module Graphula.Class
   , MonadGraphulaFrontend (..)
   , MonadGraphulaBackend (..)
   , GraphulaSafeToInsert
+  , SomeGraphulaPersist (..)
+  , SomeGraphulaEntity (..)
   ) where
 
 import Control.Monad.IO.Class (MonadIO)
@@ -56,6 +59,13 @@ instance
 type MonadGraphula m =
   (Monad m, MonadIO m, MonadGraphulaBackend m, MonadGraphulaFrontend m)
 
+data SomeGraphulaPersist where
+  SomeGraphulaPersist :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend, GraphulaSafeToInsert a) => (Maybe (Key a), a) -> SomeGraphulaPersist
+
+data SomeGraphulaEntity where
+  SomeGraphulaEntity :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend, GraphulaSafeToInsert a) => Entity a -> SomeGraphulaEntity
+
+
 class MonadGraphulaFrontend m where
   insert
     :: ( PersistEntityBackend a ~ SqlBackend
@@ -66,6 +76,10 @@ class MonadGraphulaFrontend m where
     => Maybe (Key a)
     -> a
     -> m (Maybe (Entity a))
+  multiInsert
+    :: (Monad m)
+    => [SomeGraphulaPersist]
+    -> m [SomeGraphulaEntity]
 
   remove
     :: (PersistEntityBackend a ~ SqlBackend, PersistEntity a, Monad m)

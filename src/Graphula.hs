@@ -142,6 +142,8 @@ import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
 import Control.Monad.Trans (MonadTrans, lift)
 import Data.IORef (IORef, newIORef)
 import Data.Kind (Constraint, Type)
+import Data.Maybe (catMaybes)
+import Data.Traversable (for)
 import Data.Typeable (Typeable)
 import Database.Persist
   ( PersistEntity
@@ -225,6 +227,23 @@ instance (MonadIO m, MonadIO n) => MonadGraphulaFrontend (GraphulaT n m) where
           whenNothing existingUnique $ do
             insertKey key n
             getEntity key
+
+  multiInsert some = do
+    RunDB runDB <- asks dbRunner
+    lift . runDB $ do
+      results <- for some $ \(SomeGraphulaPersist (mKey, n)) -> case mKey of
+        Nothing ->
+          insertUnique n >>= \case
+            Nothing -> pure Nothing
+            Just key -> fmap SomeGraphulaEntity <$> getEntity key
+        Just key -> do
+          existingKey <- get key
+          whenNothing existingKey $ do
+            existingUnique <- checkUnique n
+            whenNothing existingUnique $ do
+              insertKey key n
+              fmap SomeGraphulaEntity <$> getEntity key
+      pure $ catMaybes results
 
   remove key = do
     RunDB runDB <- asks dbRunner
