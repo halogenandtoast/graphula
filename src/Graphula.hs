@@ -133,12 +133,13 @@ module Graphula
   , NodeOptions
   , GenerateKey
   , NoConstraint
+  , withSingleTransaction
   ) where
 
 import Prelude hiding (readFile)
 
 import Control.Monad.IO.Unlift
-import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
+import Control.Monad.Reader (MonadReader, ReaderT, ask, asks, runReaderT)
 import Control.Monad.Trans (MonadTrans, lift)
 import Data.IORef (IORef, newIORef)
 import Data.Kind (Constraint, Type)
@@ -209,6 +210,14 @@ instance MonadIO m => MonadGraphulaBackend (GraphulaT n m) where
   type Logging (GraphulaT n m) = NoConstraint
   askGen = asks gen
   logNode _ = pure ()
+
+withSingleTransaction
+  :: MonadUnliftIO n
+  => GraphulaT n (ReaderT SqlBackend n) a
+  -> GraphulaT n (ReaderT SqlBackend n) a
+withSingleTransaction action = do
+  Args (RunDB runDB) gen' <- ask
+  lift $ runDB $ runReaderT (runGraphulaT' action) (Args (RunDB id) gen')
 
 instance (MonadIO m, MonadIO n) => MonadGraphulaFrontend (GraphulaT n m) where
   insert mKey n = do
