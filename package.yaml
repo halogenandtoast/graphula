@@ -18,6 +18,7 @@ ghc-options:
   - -Wno-missing-import-lists
   - -Wno-safe
   - -Wno-unsafe
+  - -Wno-missing-role-annotations
 
 when:
   - condition: impl(ghc >= 9.2)

@@ -195,13 +195,39 @@ simpleSpec =
       answerYes (entityVal answer) `shouldBe` True
 ```
 
+```haskell
+multiNodeSpec :: IO ()
+multiNodeSpec =
+  runGraphulaT Nothing runDB $ do
+    (school, teacher, course, answer) <- withSingleTransaction $ do
+      school <- node @School () mempty
+      teacher <- node @Teacher (Only $ entityKey school) mempty
+      course <- node @Course (entityKey school, entityKey teacher) mempty
+      student <- node @Student () $ edit $ \s -> s { studentName = "Pat" }
+      question <- node @Question () mempty
+      answer <- node @Answer
+        (entityKey question, entityKey student)
+        $ edit $ \a -> a { answerYes = True }
+      pure (school, teacher, course, answer)
+
+    liftIO $ do
+      -- Typically, you would run some other function like "fetch correct
+      -- answers at school" and assert you found the correct answers you
+      -- generated. In this example we just assert some things about the data
+      -- directly:
+      teacherSchoolId (entityVal teacher) `shouldBe` entityKey school
+      courseTeacherId (entityVal course) `shouldBe` entityKey teacher
+      answerYes (entityVal answer) `shouldBe` True
+```
+
 <!--
 ```haskell
 main :: IO ()
 main = hspec $
-  describe "graphula" . parallel $ do
+  describe "graphula" $ do
     it "generates and links arbitrary graphs of data" simpleSpec
     it "allows logging graphs" loggingSpec
+    it "allows multiple nodes in a single transaction" multiNodeSpec
 
 runDB :: MonadUnliftIO m => ReaderT SqlBackend (NoLoggingT (ResourceT m)) a -> m a
 runDB f = runSqlite "test.db" $ do

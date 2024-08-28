@@ -139,7 +139,7 @@ module Graphula
 import Prelude hiding (readFile)
 
 import Control.Monad.IO.Unlift
-import Control.Monad.Reader (MonadReader, ReaderT, ask, asks, runReaderT)
+import Control.Monad.Reader (MonadReader, ReaderT(..), asks, runReaderT)
 import Control.Monad.Trans (MonadTrans, lift)
 import Data.IORef (IORef, newIORef)
 import Data.Kind (Constraint, Type)
@@ -211,13 +211,17 @@ instance MonadIO m => MonadGraphulaBackend (GraphulaT n m) where
   askGen = asks gen
   logNode _ = pure ()
 
-withSingleTransaction
-  :: MonadUnliftIO n
-  => GraphulaT n (ReaderT SqlBackend n) a
-  -> GraphulaT n (ReaderT SqlBackend n) a
-withSingleTransaction action = do
-  Args (RunDB runDB) gen' <- ask
-  lift $ runDB $ runReaderT (runGraphulaT' action) (Args (RunDB id) gen')
+-- Using the natural transformation in withSingleTransaction
+withSingleTransaction :: forall n m a. (MonadIO m, m ~ ReaderT SqlBackend n) => GraphulaT n m a -> GraphulaT n m a
+withSingleTransaction action = GraphulaT $ \(Args (RunDB runDB) gen') -> do
+  runDB $ runReaderT (runGraphulaT' (action :: GraphulaT n m a)) (Args (RunDB (\a -> withRunInIO (\runInIO -> runInIO a))) gen')
+
+--   :: GraphulaT n m a
+--   -> GraphulaT n m a
+-- withSingleTransaction action = GraphulaT . ReaderT $ \(Args (RunDB runDB) gen') -> do
+--   runDB $ do
+--     unsafeCoerce $ runReaderT (runGraphulaT' action) (Args (RunDB ((`runReaderT` undefined))) gen')
+  
 
 instance (MonadIO m, MonadIO n) => MonadGraphulaFrontend (GraphulaT n m) where
   insert mKey n = do
