@@ -13,6 +13,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -211,17 +212,17 @@ instance MonadIO m => MonadGraphulaBackend (GraphulaT n m) where
   askGen = asks gen
   logNode _ = pure ()
 
--- Using the natural transformation in withSingleTransaction
-withSingleTransaction :: forall n m a. (MonadIO m, m ~ ReaderT SqlBackend n) => GraphulaT n m a -> GraphulaT n m a
-withSingleTransaction action = GraphulaT $ \(Args (RunDB runDB) gen') -> do
-  runDB $ runReaderT (runGraphulaT' (action :: GraphulaT n m a)) (Args (RunDB (\a -> withRunInIO (\runInIO -> runInIO a))) gen')
+withSingleTransaction :: forall n m a. Monad m => GraphulaT n n a -> GraphulaT n m a
+withSingleTransaction body = do
+  RunDB (runDB :: ReaderT SqlBackend n a -> m a) <- asks dbRunner
+  GraphulaT $ ReaderT $ \args -> runDB $ ReaderT $ \backend -> do
+    runReaderT (runGraphulaT' body) (Args (RunDB (`runReaderT` backend)) $ gen args)
 
---   :: GraphulaT n m a
---   -> GraphulaT n m a
--- withSingleTransaction action = GraphulaT . ReaderT $ \(Args (RunDB runDB) gen') -> do
---   runDB $ do
---     unsafeCoerce $ runReaderT (runGraphulaT' action) (Args (RunDB ((`runReaderT` undefined))) gen')
-  
+-- withSingleTransaction' :: forall n m a b. Monad m => (n a -> m a) -> GraphulaT n m a -> GraphulaT n m a
+-- withSingleTransaction' f body = do
+--   RunDB (runDB :: ReaderT SqlBackend n a -> m a) <- asks dbRunner
+--   GraphulaT $ ReaderT $ \args -> runDB $ ReaderT $ \backend -> do
+--     runReaderT (runGraphulaT' body) ((Args (RunDB (fmap f . (`runReaderT` backend))) $ gen args) :: Args SqlBackend n m)
 
 instance (MonadIO m, MonadIO n) => MonadGraphulaFrontend (GraphulaT n m) where
   insert mKey n = do
